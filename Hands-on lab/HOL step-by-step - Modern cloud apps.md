@@ -1063,7 +1063,7 @@ In this exercise, you will configure an Azure AD Business to Consumer (B2C) inst
 
 1. Navigate back to the **Azure AD B2C** blade that was opened in the last task.
 
-2. To enable sign-up on your application, you will need to create a sign-up policy. This policy describes the experiences consumers will go through during sign-up and the contents of tokens the application will receive on successful sign-ups. Select **User flows (policies)** link on the left menu and then **+New user flow** link at the top of the blade.
+2. To enable sign-up on your application, you will need to create a sign-up policy. This policy describes the experiences consumers will go through during sign-up and the contents of tokens the application will receive on successful sign-ups. Select **User flows** link on the left menu and then **+New user flow** link at the top of the blade.
 
     ![In the Azure Portal, on the left, Azure AD B2C - User Flows selected.](media/2019-03-28-12-17-22.png "Azure AD B2C - User Flows selected")
 
@@ -1104,7 +1104,7 @@ In this exercise, you will configure an Azure AD Business to Consumer (B2C) inst
 
     ![Azure AD B2C - User flow - Review the collection and return claims columns.](media/2019-03-28-12-44-04.png "Collection and return claims")
 
-11. Select **Create**. Observe the policy just created appears as **B2C\_1\_SignUp** (the **B2C\_1\_** fragment is automatically added) in the **Sign-up policies** blade.
+11. Select **Create**. Observe the policy just created appears as **B2C\_1\_SignUp** (the **B2C\_1\_** fragment is automatically added) in the **Sign-up and sign in** blade.
 
     >**Note**: The page may take a few minutes to load/refresh after you start creating the policy.
 
@@ -1131,7 +1131,7 @@ In this exercise, you will configure an Azure AD Business to Consumer (B2C) inst
 
 To enable profile editing on your application, you will need to create a profile editing policy. This policy describes the experiences that consumers will go through during profile editing and the contents of tokens that the application will receive on successful completion.
 
-1. Select **User flows (polices)** link on the left blade.
+1. Select **User flows** link on the left blade.
 
 2. Select **+ New user flow** link at the top of the blade.
 
@@ -1190,16 +1190,18 @@ To enable profile editing on your application, you will need to create a profile
 
     ![The Startup.cs file with the "app.UseAuthorization();" line of code highlighted.](media/2019-04-19-15-08-40.png "Startup.cs")
 
-2. Add the following `using` statement to the top of the **Startup.cs** code file:
+2. Add the following `using` directives to the top of the **Startup.cs** code file:
 
     ```
     using Microsoft.AspNetCore.Authentication;
+    using Microsoft.AspNetCore.Authentication.AzureADB2C.UI;
     ```
 
 3. Locate the `app.UseAuthentication();` line within the `public void Configure` method, and add the following line of code after it:
 
     ```
     app.UseAuthentication();
+    app.UseAuthorization();
     ```
 
     The result will look similar to the following:
@@ -1215,7 +1217,7 @@ To enable profile editing on your application, you will need to create a profile
 
 4. Add the following settings in the **Application Settings** section:
 
-   - AzureADB2C:Instance - `https://login.microsoftonline.com/tfp/`.
+   - AzureADB2C:Instance - `https://[your Azure AD B2C name].b2clogin.com/tfp/`.
    - AzureADB2C:ClientId - **B2C Application ID you copied down earlier**.
    - AzureADB2C:CallbackPath - `/signin-oidc-b2c`
    - AzureADB2C:Domain - **[your Azure AD B2C name].onmicrosoft.com**.
@@ -1235,15 +1237,15 @@ Your app is now properly configured to communicate with Azure AD B2C by using AS
 
 2. Select **MVC Controller -- Empty** and then select **Add**. Replace **DefaultController** value with **AccountController** in the **Add Controller** dialog box.
 
-    ![On the left of the Add Scaffold window, Installed / Controller is selected. In the center of the window, MVC 5 Controller - Empty is selected.](images/Hands-onlabstep-by-step-Moderncloudappsimages/media/image178.png "Add Scaffold window")
+    ![On the left of the Add Scaffold window, Installed / Controller is selected. In the center of the window, MVC Controller - Empty is selected.](images/Hands-onlabstep-by-step-Moderncloudappsimages/media/image178.png "Add Scaffold window")
 
-3. Add the following using statement to the top of the controller:
+3. Add the following using directives to the top of the controller:
 
     ```csharp
-    using Microsoft.AspNetCore.Mvc;
     using Microsoft.AspNetCore.Authentication;
+    using Microsoft.AspNetCore.Authentication.AzureADB2C.UI;
+    using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Configuration;
-    using System.Threading.Tasks;
     ```
 
 4. Locate the default controller **Index** method.
@@ -1255,22 +1257,18 @@ Your app is now properly configured to communicate with Azure AD B2C by using AS
     ```csharp
     // Controllers\AccountController.cs
 
-    public static string SignUpSignInPolicyId;
-    public static string EditProfilePolicyId;
+    private string _editProfilePolicyId;
 
     public AccountController(IConfiguration configuration)
     {
-        SignUpSignInPolicyId = configuration.GetValue<string>("AzureADB2C:SignUpSignInPolicyId");
-        EditProfilePolicyId = configuration.GetValue<string>("AzureADB2C:EditProfilePolicyId");
+        _editProfilePolicyId = configuration.GetValue<string>("AzureADB2C:EditProfilePolicyId");
     }
 
     public ActionResult SignIn()
     {
         if (!User.Identity.IsAuthenticated)
         {
-            // To execute a policy, you simply need to trigger an OWIN challenge.
-            // You can indicate which policy to use by specifying the policy id as the AuthenticationType
-            return Challenge(new AuthenticationProperties() { RedirectUri = "/" }, SignUpSignInPolicyId);
+            return Challenge(new AuthenticationProperties() { RedirectUri = "/" }, AzureADB2CDefaults.AuthenticationScheme);
         }
         return RedirectToAction("Index", "Home");
     }
@@ -1279,7 +1277,7 @@ Your app is now properly configured to communicate with Azure AD B2C by using AS
     {
         if (!User.Identity.IsAuthenticated)
         {
-            return Challenge(new AuthenticationProperties() { RedirectUri = "/" }, SignUpSignInPolicyId);
+            return Challenge(new AuthenticationProperties() { RedirectUri = "/" }, AzureADB2CDefaults.AuthenticationScheme);
         }
         return RedirectToAction("Index", "Home");
     }
@@ -1288,17 +1286,27 @@ Your app is now properly configured to communicate with Azure AD B2C by using AS
     {
         if (User.Identity.IsAuthenticated)
         {
-            return Challenge(new AuthenticationProperties() { RedirectUri = "/" }, EditProfilePolicyId);
+                var properties = new AuthenticationProperties() { RedirectUri = "/" };
+                properties.Items[AzureADB2CDefaults.PolicyKey] = _editProfilePolicyId;
+                return Challenge(
+                    properties,
+                    AzureADB2CDefaults.AuthenticationScheme);
         }
         return RedirectToAction("Index", "Home");
     }
 
     public async Task SignOut()
     {
-        if (User.Identity.IsAuthenticated)
+        if (!User.Identity.IsAuthenticated)
         {
-            await HttpContext.SignOutAsync();
+            return RedirectToAction("Index", "Home");
         }
+        string redirectUri = Url.Action("Index", "Home", null, Request.Scheme);
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = redirectUri
+        };
+        return SignOut(properties, AzureADB2CDefaults.CookieScheme, AzureADB2CDefaults.OpenIdScheme);
     }
     ```
 
@@ -1311,9 +1319,10 @@ When you authenticate users by using OpenID Connect, Azure AD returns an ID toke
 1. Open the **Controllers\\HomeController.cs** file and add the following using statements at the end of the other using statements at the top of the file.
 
     ```csharp
-    using System.Linq;
-    using System.Security.Claims;
+    using Contoso.Apps.SportsLeague.Web.Models;
     using Microsoft.AspNetCore.Authorization;
+    using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Configuration;
     ```
 
 2. Still in the **Controllers\\HomeController.cs** file, add the following method to the **HomeController** class:
@@ -1414,7 +1423,7 @@ When you authenticate users by using OpenID Connect, Azure AD returns an ID toke
                     <a href="#" class="top-wrap"><span class="icon-phone">Call today: </span> (555) 555-8000</a>
                     @Html.ActionLink("Claims", "Claims", "Home")
                 </div>
-                @Html.Partial("_LoginPartial")
+                <partial name="_LoginPartial" />
             </div>
         </div>
     </div>
